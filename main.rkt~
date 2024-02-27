@@ -2,7 +2,7 @@
 (require typed/rackunit)
 
 ;language definition
-(define-type ExprC (U NumC BinopC IdC Ifleq0C AppC LamC IfC StrC ErrC Println))
+(define-type ExprC (U NumC BinopC IdC Ifleq0C AppC LamC IfC StrC ErrC))
 (struct NumC    ([n : Real]) #:transparent)                                   ;numbers
 (struct BinopC  ([operation : Symbol] [l : ExprC] [r : ExprC]) #:transparent) ;+-*/
 (struct AppC    ([fun : ExprC] [arg : (Listof ExprC)]) #:transparent)         ;Function call
@@ -12,7 +12,6 @@
 (struct StrC ([s : String]) #:transparent)                                    ;Simple string
 (struct LamC ([arg : (Listof Symbol)] [body : ExprC]) #:transparent)          ;Lambda function
 (struct ErrC ([v : Any]) #:transparent)                                       ;Error
-(struct Println ([s : String]) #:transparent)
 
 ;value definition
 (define-type Value (U NumV BoolV StrV ClosV PrimopV ErrV))
@@ -22,9 +21,6 @@
 (struct ClosV ([arg : (Listof Symbol)] [body : ExprC] [env : Env]) #:transparent)
 (struct PrimopV ([op : Symbol]) #:transparent)
 (struct ErrV ([v : Any]) #:transparent)
-
-(define-type Library (U Seq))
-(struct Seq ([s : (Listof ExprC)]))
 
 ;environment definition
 (define-type Env (Listof Binding))
@@ -97,9 +93,7 @@
                                    (cond [(= (length arguments) (length args))
                                           (interp body (extend arguments args env))]
                                          [else (error 'interp "OAZO5 incorrect argument length")])]
-                                  [(NumV n) (error 'interp "OAZO5 incorrect argument type of ~v" n)])]
-    [(Println s) (println s)
-                 (BoolV #t)]))
+                                  [(NumV n) (error 'interp "OAZO5 incorrect argument type of ~v" n)])]))
 
 
 
@@ -171,22 +165,8 @@
            [else (error 'interp "OAZO5 two args with the same name")])]
     [(list func args ...) (AppC (parse func) (for/list ([item (in-list args)]) 
                                                (parse (cast item Sexp))))]
-    [(list 'println (? string? s)) (Println s)]
-    ['read-num (NumC (read))]
     [other (error 'parse "OAZO5 syntax error in ~e" other)]))
 
-
-(define (read) : Real
-  (print '>)
-  (define input (read-line (current-input-port)))
-  (cond
-    [(eof-object? input) (error 'read "Reached end of file while reading")]
-    [(string? input)
-     (define num (string->number input))
-     (cond
-       [(and (real? num) (not (nan? num))) num]
-       [else (error 'read "Tried to read a non-number")])]
-    [else (error 'read "Invalid input type")]))
 
 
 
