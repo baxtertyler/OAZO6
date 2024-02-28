@@ -2,7 +2,7 @@
 (require typed/rackunit)
 
 ;language definition
-(define-type ExprC (U NumC BinopC IdC Ifleq0C AppC LamC IfC StrC ErrC Println Seq))
+(define-type ExprC (U NumC BinopC IdC Ifleq0C AppC LamC IfC StrC ErrC PrintC SeqC))
 (struct NumC    ([n : Real]) #:transparent)                                   ;numbers
 (struct BinopC  ([operation : Symbol] [l : ExprC] [r : ExprC]) #:transparent) ;+-*/
 (struct AppC    ([fun : ExprC] [arg : (Listof ExprC)]) #:transparent)         ;Function call
@@ -12,9 +12,8 @@
 (struct StrC ([s : String]) #:transparent)                                    ;Simple string
 (struct LamC ([arg : (Listof Symbol)] [body : ExprC]) #:transparent)          ;Lambda function
 (struct ErrC ([v : Any]) #:transparent)                                       ;Error
-
-(struct Println ([s : String]) #:transparent)
-(struct Seq ([s : (Listof ExprC)]))
+(struct PrintC ([s : String]) #:transparent)
+(struct SeqC ([s : (Listof ExprC)]))
 
 ;value definition
 (define-type Value (U NumV BoolV StrV ClosV PrimopV ErrV))
@@ -98,7 +97,7 @@
                                           (interp body (extend arguments args env))]
                                          [else (error 'interp "OAZO5 incorrect argument length")])]
                                   [(NumV n) (error 'interp "OAZO5 incorrect argument type of ~v" n)])]
-    [(Println s) (println s) (BoolV #t)]))
+    [(PrintC s) (println s) (BoolV #t)]))
 
 
 
@@ -133,10 +132,10 @@
            ['equal? (BoolV (equal? l r))]
            [else (error 'parse "OAZO5 operation invalid")])]
         [(and (StrV? l) (StrV? r))
-              (match op
-                ['equal? (BoolV (equal? l r))]
-                ['++ (StrV (string-append (StrV-s l) (StrV-s r)))]
-                [else (error 'parse "OAZO5 operation invalid")])]
+         (match op
+           ['equal? (BoolV (equal? l r))]
+           ['++ (StrV (string-append (StrV-s l) (StrV-s r)))]
+           [else (error 'parse "OAZO5 operation invalid")])]
         [else (match op
                 ['equal? (BoolV (equal? l r))]
                 [else (error 'parse "OAZO5 operation invalid")])]))
@@ -168,7 +167,7 @@
     [(? string? s) (StrC s)]
     [(list 'error msg) (ErrC msg)]
     ['error (ErrC "")]
-    [(list 'println (? string? s)) (Println s)]
+    [(list 'println (? string? s)) (PrintC s)]
     [(list 'read-num) (NumC (read))]
     [(list 'if i 'then t 'else e) (IfC (parse i) (parse t) (parse e))]
     [(list 'let (list (? symbol? (? is-allowed? var)) '<- val) ... body)
@@ -179,6 +178,8 @@
      (cond [(and (not-has-duplicates? (cast args (Listof Symbol)))
                  (cast args (Listof Symbol))) (LamC (cast args (Listof Symbol)) (parse body))]
            [else (error 'interp "OAZO5 two args with the same name")])]
+    
+                              
     [(list func args ...) (AppC (parse func) (for/list ([item (in-list args)]) 
                                                (parse (cast item Sexp))))]
     [other (error 'parse "OAZO5 syntax error in ~e" other)]))
