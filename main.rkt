@@ -8,21 +8,21 @@
 (struct AppC    ([fun : ExprC] [arg : (Listof ExprC)]) #:transparent)         ;Function call
 (struct IdC     ([id : Symbol]) #:transparent)                                ;Variable
 (struct Ifleq0C ([c : ExprC] [y : ExprC] [n : ExprC]) #:transparent)          ;Simple conditional
-(struct IfC ([c : ExprC] [then : ExprC] [else : ExprC]) #:transparent)        ;If conditional statement
-(struct StrC ([s : String]) #:transparent)                                    ;Simple string
-(struct LamC ([arg : (Listof Symbol)] [body : ExprC]) #:transparent)          ;Lambda function
-(struct ErrC ([v : Any]) #:transparent)                                       ;Error
-(struct PrintC ([s : String]) #:transparent)
-(struct SeqC ([s : (Listof ExprC)]))
+(struct IfC     ([c : ExprC] [then : ExprC] [else : ExprC]) #:transparent)        ;If conditional statement
+(struct StrC    ([s : String]) #:transparent)                                    ;Simple string
+(struct LamC    ([arg : (Listof Symbol)] [body : ExprC]) #:transparent)          ;Lambda function
+(struct ErrC    ([v : Any]) #:transparent)                                       ;Error
+(struct PrintC  ([s : String]) #:transparent)
+(struct SeqC    ([s : (Listof ExprC)]))
 
 ;value definition
 (define-type Value (U NumV BoolV StrV ClosV PrimopV ErrV))
-(struct NumV ([n : Real]) #:transparent)
-(struct BoolV ([b : Boolean]) #:transparent)
-(struct StrV ([s : String]) #:transparent)
-(struct ClosV ([arg : (Listof Symbol)] [body : ExprC] [env : Env]) #:transparent)
+(struct NumV    ([n : Real]) #:transparent)
+(struct BoolV   ([b : Boolean]) #:transparent)
+(struct StrV    ([s : String]) #:transparent)
+(struct ClosV   ([arg : (Listof Symbol)] [body : ExprC] [env : Env]) #:transparent)
 (struct PrimopV ([op : Symbol]) #:transparent)
-(struct ErrV ([v : Any]) #:transparent)
+(struct ErrV    ([v : Any]) #:transparent)
 
 ;environment definition
 (define-type Env (Listof Binding))
@@ -178,8 +178,7 @@
      (cond [(and (not-has-duplicates? (cast args (Listof Symbol)))
                  (cast args (Listof Symbol))) (LamC (cast args (Listof Symbol)) (parse body))]
            [else (error 'interp "OAZO5 two args with the same name")])]
-    
-                              
+    [(cons 'seq r) (SeqC (cast r (Listof ExprC)))]
     [(list func args ...) (AppC (parse func) (for/list ([item (in-list args)]) 
                                                (parse (cast item Sexp))))]
     [other (error 'parse "OAZO5 syntax error in ~e" other)]))
