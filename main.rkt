@@ -2,7 +2,7 @@
 (require typed/rackunit)
 
 ;language definition
-(define-type ExprC (U NumC BinopC IdC Ifleq0C AppC LamC IfC StrC ErrC PrintC SeqC))
+(define-type ExprC (U NumC BinopC IdC Ifleq0C AppC LamC IfC StrC ErrC))
 (struct NumC    ([n : Real]) #:transparent)                                   ;numbers
 (struct BinopC  ([operation : Symbol] [l : ExprC] [r : ExprC]) #:transparent) ;+-*/
 (struct AppC    ([fun : ExprC] [arg : (Listof ExprC)]) #:transparent)         ;Function call
@@ -12,8 +12,6 @@
 (struct StrC    ([s : String]) #:transparent)                                    ;Simple string
 (struct LamC    ([arg : (Listof Symbol)] [body : ExprC]) #:transparent)          ;Lambda function
 (struct ErrC    ([v : Any]) #:transparent)                                       ;Error
-(struct PrintC  ([s : String]) #:transparent)
-(struct SeqC    ([s : (Listof ExprC)]))
 
 ;value definition
 (define-type Value (U NumV BoolV StrV ClosV PrimopV ErrV))
@@ -39,9 +37,10 @@
                  (Binding 'equal? (PrimopV 'equal?))
                  (Binding 'true (BoolV #t))
                  (Binding 'false (BoolV #f))
-                 (Binding '++ (PrimopV '++)))) 
-
-
+                 (Binding '++ (PrimopV '++))
+                 (Binding 'println (PrimopV 'println))
+                 (Binding 'read-num (PrimopV 'read-num))
+                 (Binding 'seq (PrimopV 'seq)))) 
 
 
 
@@ -91,13 +90,12 @@
                                 (define arguments (map (lambda ([a : ExprC])
                                                          (interp a env)) args))
                                 (match f
-                                  [(PrimopV op) (operation op (first arguments) (first (rest arguments)))]
+                                  [(PrimopV op) (operation op arguments)]
                                   [(ClosV (list args ...) body env)
                                    (cond [(= (length arguments) (length args))
                                           (interp body (extend arguments args env))]
                                          [else (error 'interp "OAZO5 incorrect argument length")])]
-                                  [(NumV n) (error 'interp "OAZO5 incorrect argument type of ~v" n)])]
-    [(PrintC s) (println s) (BoolV #t)]))
+                                  [(NumV n) (error 'interp "OAZO5 incorrect argument type of ~v" n)])]))
 
 
 
@@ -115,32 +113,71 @@
 
 
 
-
-
+;out: values applied to the racket operation based on that symbol
+(define (operation [op : Symbol] [args : (Listof Value)]) : Value
+  (define l (first args))
+  (define r (first (rest args)))
+  (match op
+    ['+ (cond [(and (equal? (length args) 2) (NumV? (first args)) (NumV? (first (rest args))))
+               (NumV (+ (NumV-n (cast (first args) NumV)) (NumV-n (cast (first (rest args)) NumV))))]
+              [else (error 'opertion "OAZO6 cant + those")])]
+    ['- (cond [(and (equal? (length args) 2) (NumV? (first args)) (NumV? (first (rest args))))
+               (NumV (- (NumV-n (cast (first args) NumV)) (NumV-n (cast (first (rest args)) NumV))))]
+              [else (error 'opertion "OAZO6 cant + those")])]
+    ['/ (cond [(and (equal? (length args) 2) (NumV? (first args)) (NumV? (first (rest args))))
+               (NumV (/ (NumV-n (cast (first args) NumV)) (NumV-n (cast (first (rest args)) NumV))))]
+              [else (error 'opertion "OAZO6 cant + those")])]
+    ['* (cond [(and (equal? (length args) 2) (NumV? (first args)) (NumV? (first (rest args))))
+               (NumV (* (NumV-n (cast (first args) NumV)) (NumV-n (cast (first (rest args)) NumV))))]
+              [else (error 'opertion "OAZO6 cant + those")])]
+    ['<= (cond [(and (equal? (length args) 2) (NumV? (first args)) (NumV? (first (rest args))))
+                (BoolV (<= (NumV-n (cast (first args) NumV)) (NumV-n (cast (first (rest args)) NumV))))]
+               [else (error 'opertion "OAZO6 cant + those")])]
+    ['equal? (cond [(equal? (length args) 2)
+                    (BoolV (<= (NumV-n (cast (first args) NumV)) (NumV-n (cast (first (rest args)) NumV))))]
+                   [else (error 'opertion "OAZO6 cant + those")])]
+    ['++ (cond [(and (equal? (length args) 2) (StrV-s (cast (first args) StrV)) (StrV-s (cast (first (rest args)) StrV)))
+                (StrV (string-append (StrV-s (cast (first args) StrV)) (StrV-s (cast (first (rest args)) StrV))))]
+               [else (error 'opertion "OAZO6 cant + those")])]
+    ['println (cond [(equal? (length args) 1) (println (first args)) (BoolV #t)]
+                    [else (error 'opertion "OAZO6 cant + those")])]
+    ['read-num (cond [(equal? (length args) 0) (NumV (read))]
+                     [else (error 'opertion "OAZO6 cant + those")])]
+    #;['seq]))
+#|
 ;OPERATION
 ;in: the operation as a symbol and the two values
 ;out: values applied to the racket operation based on that symbol
-(define (operation [op : Symbol] [l : Value] [r : Value]) : Value
-  (cond [(and (NumV? l) (NumV? r))
-         (match op
-           ['+ (NumV (+ (NumV-n l) (NumV-n r)))]
-           ['- (NumV (- (NumV-n l) (NumV-n r)))]
-           ['* (NumV (* (NumV-n l) (NumV-n r)))]
-           ['/ (cond [(equal? (NumV-n r) 0) (error 'operation "OAZO5 div by 0")]
-                     [else (NumV (/ (NumV-n l) (NumV-n r)))])]
-           ['<= (BoolV (<= (NumV-n l) (NumV-n r)))]
-           ['equal? (BoolV (equal? l r))]
-           [else (error 'parse "OAZO5 operation invalid")])]
-        [(and (StrV? l) (StrV? r))
-         (match op
-           ['equal? (BoolV (equal? l r))]
-           ['++ (StrV (string-append (StrV-s l) (StrV-s r)))]
-           [else (error 'parse "OAZO5 operation invalid")])]
-        [else (match op
-                ['equal? (BoolV (equal? l r))]
-                [else (error 'parse "OAZO5 operation invalid")])]))
-
-
+(define (operation [op : Symbol] [args : (Listof Value)]) : Value
+  (cond [(equal? (length args) 2) (define l (first args))
+                                  (define r (first (rest args)))
+                                  (cond [(and (NumV? l) (NumV? r))
+                                         (match op
+                                           ['+ (NumV (+ (NumV-n l) (NumV-n r)))]
+                                           ['- (NumV (- (NumV-n l) (NumV-n r)))]
+                                           ['* (NumV (* (NumV-n l) (NumV-n r)))]
+                                           ['/ (cond [(equal? (NumV-n r) 0) (error 'operation "OAZO5 div by 0")]
+                                                     [else (NumV (/ (NumV-n l) (NumV-n r)))])]
+                                           ['<= (BoolV (<= (NumV-n l) (NumV-n r)))]
+                                           ['equal? (BoolV (equal? l r))]
+                                           [else (error 'parse "OAZO5 operation invalid")])]
+                                        [(and (StrV? l) (StrV? r))
+                                         (match op
+                                           ['equal? (BoolV (equal? l r))]
+                                           ['++ (StrV (string-append (StrV-s l) (StrV-s r)))]
+                                           [else (error 'parse "OAZO5 operation invalid")])]
+                                        [else (match op
+                                                ['equal? (BoolV (equal? l r))]
+                                                [else (error 'parse "OAZO5 operation invalid")])])]
+        [(equal? (length args) 1) (match op
+                                    ['println (println (first args)) (BoolV #t)]
+                                    [else (error 'parse "OAZO5 operation invalid")])]
+        [(equal? (length args) 0) (match op
+                                    ['read-num (NumV (read))]
+                                    [else (error 'parse "OAZO5 operation invalid")])]
+        #;[else (match op
+                ['seq ...]
+                [else (error 'parse "OAZO5 operation invalid")])]))|#
 
 
 
@@ -167,7 +204,6 @@
     [(? string? s) (StrC s)]
     [(list 'error msg) (ErrC msg)]
     ['error (ErrC "")]
-    [(list 'println (? string? s)) (PrintC s)]
     [(list 'read-num) (NumC (read))]
     [(list 'if i 'then t 'else e) (IfC (parse i) (parse t) (parse e))]
     [(list 'let (list (? symbol? (? is-allowed? var)) '<- val) ... body)
@@ -178,7 +214,6 @@
      (cond [(and (not-has-duplicates? (cast args (Listof Symbol)))
                  (cast args (Listof Symbol))) (LamC (cast args (Listof Symbol)) (parse body))]
            [else (error 'interp "OAZO5 two args with the same name")])]
-    [(cons 'seq r) (SeqC (cast r (Listof ExprC)))]
     [(list func args ...) (AppC (parse func) (for/list ([item (in-list args)]) 
                                                (parse (cast item Sexp))))]
     [other (error 'parse "OAZO5 syntax error in ~e" other)]))
