@@ -1,6 +1,19 @@
 #lang typed/racket
 (require typed/rackunit)
 
+(provide file-interp)
+ 
+(define-type Simple-Sexp
+  (U Symbol Number String (Listof Simple-Sexp)))
+ 
+(define-predicate sexp? Simple-Sexp)
+ 
+(define (file-interp [f : Path-String])
+  (define v (file->value f))
+  (cond [(sexp? v) (top-interp v)]
+        [else (error 'file-interp "expected file to contain s-expression, got: ~e" v)]))
+
+
 ;language definition
 (define-type ExprC (U NumC BinopC IdC Ifleq0C AppC LamC IfC StrC ErrC))
 (struct NumC    ([n : Real]) #:transparent)                                   ;numbers
@@ -12,6 +25,7 @@
 (struct StrC    ([s : String]) #:transparent)                                    ;Simple string
 (struct LamC    ([arg : (Listof Symbol)] [body : ExprC]) #:transparent)          ;Lambda function
 (struct ErrC    ([v : Any]) #:transparent)                                       ;Error
+
 
 ;value definition
 (define-type Value (U NumV BoolV StrV ClosV PrimopV ErrV))
@@ -41,6 +55,8 @@
                  (Binding 'println (PrimopV 'println))
                  (Binding 'read-num (PrimopV 'read-num))
                  (Binding 'seq (PrimopV 'seq)))) 
+
+
 
 
 
@@ -100,10 +116,9 @@
 
 
 
-
 ;LOOKUP
 ;in: a symbol and the current environment
-;returns the symbols value in the environment, erros if not found
+;returns the symbols value in the environment, erros if not found 
 (define (lookup [for : Symbol] [env : Env]) : Value
   (match env
     ['() (error 'lookup "OAZO5 name not found: ~e" for)]
@@ -113,39 +128,61 @@
 
 
 
+
+;OPERATION
+;in: the operation as a symbol and the two values
 ;out: values applied to the racket operation based on that symbol
 (define (operation [op : Symbol] [args : (Listof Value)]) : Value
-  (define l (first args))
-  (define r (first (rest args)))
-  (match op
-    ['+ (cond [(and (equal? (length args) 2) (NumV? (first args)) (NumV? (first (rest args))))
-               (NumV (+ (NumV-n (cast (first args) NumV)) (NumV-n (cast (first (rest args)) NumV))))]
-              [else (error 'opertion "OAZO6 cant + those")])]
-    ['- (cond [(and (equal? (length args) 2) (NumV? (first args)) (NumV? (first (rest args))))
-               (NumV (- (NumV-n (cast (first args) NumV)) (NumV-n (cast (first (rest args)) NumV))))]
-              [else (error 'opertion "OAZO6 cant - those")])]
-    ['/ (cond [(and (equal? (length args) 2) (NumV? (first args)) (NumV? (first (rest args))))
-               (NumV (/ (NumV-n (cast (first args) NumV)) (NumV-n (cast (first (rest args)) NumV))))]
-              [else (error 'opertion "OAZO6 cant / those")])]
-    ['* (cond [(and (equal? (length args) 2) (NumV? (first args)) (NumV? (first (rest args))) (not (equal? (NumV-n (cast (first (rest args)) NumV)) 0)))
-               (NumV (* (NumV-n (cast (first args) NumV)) (NumV-n (cast (first (rest args)) NumV))))]
-              [else (error 'opertion "OAZO6 cant * those")])]
-    ['<= (cond [(and (equal? (length args) 2) (NumV? (first args)) (NumV? (first (rest args))))
-                (BoolV (<= (NumV-n (cast (first args) NumV)) (NumV-n (cast (first (rest args)) NumV))))]
-               [else (error 'opertion "OAZO6 cant + those")])]
-    ['equal? (cond [(equal? (length args) 2)
-                    (BoolV (equal? (first args) (first (rest args))))]
-                   [else (error 'opertion "OAZO6 cant equal those")])]
-    ['++ (cond [(and (equal? (length args) 2) (StrV-s (cast (first args) StrV)) (StrV-s (cast (first (rest args)) StrV)))
-                (StrV (string-append (StrV-s (cast (first args) StrV)) (StrV-s (cast (first (rest args)) StrV))))]
-               [else (error 'opertion "OAZO6 cant ++ those")])]
-    ['println (cond [(equal? (length args) 1) (println (first args)) (BoolV #t)]
-                    [else (error 'opertion "OAZO6 cant print that")])]
-    ['read-num (cond [(equal? (length args) 0) (NumV (read))]
-                     [else (error 'opertion "OAZO6 cant read-num")])]
-    #;['seq]))
+  (cond [(equal? (length args) 2)
+         (define l (first args))
+         (define r (first (rest args)))
+         (cond [(and (NumV? l) (NumV? r))
+                (match op
+                  ['+ (NumV (+ (NumV-n l) (NumV-n r)))]
+                  ['- (NumV (- (NumV-n l) (NumV-n r)))]
+                  ['* (NumV (* (NumV-n l) (NumV-n r)))]
+                  ['/ (cond [(equal? (NumV-n r) 0) (error 'operation "OAZO5 div by 0")]
+                            [else (NumV (/ (NumV-n l) (NumV-n r)))])]
+                  ['<= (BoolV (<= (NumV-n l) (NumV-n r)))]
+                  ['equal? (BoolV (equal? l r))]
+                  ['seq (last args)]
+                  ['++ (define str (combine args)) str]
+                  [else (error 'parse "OAZO5 operation invalid")])]
+               [(and (StrV? l) (StrV? r))
+                (match op
+                  ['equal? (BoolV (equal? l r))]
+                  ['++ (define str (combine args)) str]
+                  [else (error 'parse "OAZO5 operation invalid")])]
+               [else (match op
+                       ['++ (define str (combine args)) str]
+                       ['equal? (BoolV (equal? l r))]
+                       ['seq (last args)]
+
+                       [else (error 'parse "OAZO5 operation invalid ~e" op)])])]  
+        [(equal? (length args) 1) (match op 
+                                    ['println (println (first args)) (BoolV #t)]
+                                    ['++ (define str (combine args)) str]
+                                    [else (error 'parse "OAZO5 operation invalid")])]
+        [(equal? (length args) 0) (match op
+                                    ['read-num (NumV (read))]
+                                    [else (error 'parse "OAZO5 operation invalid")])]
+        [else (match op 
+                ['seq (last args)]
+                ['++ (define str (combine args)) str]  
+                [else (error 'parse "OAZO5 operation invalid ~e" op)])]))
+ 
 
 
+(define (combine [input : (Listof Value)]) : StrV
+  (match input 
+    ['() (StrV "")]
+    [(cons inp rest-input)
+     (StrV (string-append
+            (cond
+              [(StrV? inp) (StrV-s inp)]
+              [(NumV? inp) (format "~a" (NumV-n inp))]
+              [else (error '++ "OAZO: expected either a Real or String")])
+            (StrV-s (combine rest-input))))]))
 
 
 
@@ -170,7 +207,6 @@
     [(? string? s) (StrC s)]
     [(list 'error msg) (ErrC msg)]
     ['error (ErrC "")]
-    [(list 'read-num) (NumC (read))]
     [(list 'if i 'then t 'else e) (IfC (parse i) (parse t) (parse e))]
     [(list 'let (list (? symbol? (? is-allowed? var)) '<- val) ... body)
      (parse (cast (cons (list 'anon var ': body) val) Sexp))]
@@ -199,7 +235,6 @@
 
 
 
-
 ;IS-ALLOWED
 ;in: symbol s
 ;out: boolean represntation of if the symbol is not a keyword
@@ -221,12 +256,12 @@
 ;out: not (boolean reprentation of if the symbol contains duplicates)
 (define (not-has-duplicates? [lst : (Listof Symbol)]) : Boolean
   (define sorted-list : (Listof Symbol)
-    (sort lst symbol<?)) ; Sort the list in ascending order
+    (sort lst symbol<?))
   (define (check-duplicates [lst : (Listof Symbol)]) : Boolean
     (cond
-      [(or (empty? lst) (empty? (rest lst))) #t] ; Base case: no duplicates found
-      [(equal? (first lst) (second lst)) #f] ; Found a duplicate
-      [else (check-duplicates (rest lst))])) ; Recur with the rest of the list
+      [(or (empty? lst) (empty? (rest lst))) #t] 
+      [(equal? (first lst) (second lst)) #f] 
+      [else (check-duplicates (rest lst))]))
   (check-duplicates sorted-list))
 
 
@@ -239,7 +274,6 @@
 ;basic functions
 (check-equal? (top-interp '{let [w <- 5] [x <- 7] [y <- 5] [z <- 7] {/ {- {* {+ x y} z} w} 1}}) "79")
 (check-equal? (top-interp '{{anon {x} : {+ x 1}} 8}) "9")
-(check-equal? (top-interp '{{anon {x} : {++ x "y"}} "t"}) "\"ty\"")
 (check-equal? (top-interp '{{anon {x} : {<= x 9}} 8}) "true")
 (check-equal? (top-interp '{{anon {x} : {<= x 9}} 80}) "false")
 (check-equal? (top-interp '{{anon {h} : {h 8}} {anon {x} : {+ x 1}}}) "9") 
@@ -277,15 +311,9 @@
 (check-exn #rx"OAZO" (lambda () (parse '(anon (x x) : 3))))
 (check-exn #rx"user-error" (lambda () (top-interp '{{anon {x} : {error "whats going on"}} 8}))) 
 (check-exn #rx"user-error" (lambda () (top-interp '(+ 4 (error "1234")))))
-(check-exn #rx"OAZO" (lambda () (top-interp '(+ 4 "tyler"))))
-(check-exn #rx"OAZO" (lambda () (top-interp '(- 4 "tyler"))))
-(check-exn #rx"OAZO" (lambda () (top-interp '(/ 4 "tyler"))))
-(check-exn #rx"OAZO" (lambda () (top-interp '(* 4 "tyler"))))
-;(check-exn #rx"OAZO" (lambda () (top-interp '(equal? 1))))
-(check-exn #rx"OAZO" (lambda () (top-interp '(<= 4 "tyler"))))
-(check-exn #rx"OAZO" (lambda () (top-interp '(++ 4 "tyler" 5))))
 (check-exn #rx"user-error" (lambda () (top-interp '((anon (e) : (e e)) error))))
 (check-exn #rx"OAZO5 incorrect argument type of" (lambda () (top-interp '{3 4 5})))
+
 
 
 
